@@ -11,7 +11,7 @@
 import os, sys, sqlite3, hashlib, shutil, subprocess, datetime, tempfile
 
 MAC = os.path.expanduser('~/.dsh/whale-work/.dsh-meow/memory.db')
-HOST = 'ldy1998@NAS_HOST'
+HOST = 'ldy1998@<IP>'
 REMOTE = '$SISI_ROOT/data/mem/memory.db'
 LEVELS = ['soul', 'user', 'rules', 'lesson', 'fact', 'topic', 'project']
 

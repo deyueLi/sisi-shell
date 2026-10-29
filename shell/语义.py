@@ -9,7 +9,7 @@
 """
 import os, json, math, sqlite3, hashlib, urllib.request
 
-OLLAMA = os.environ.get('SISI_OLLAMA', 'http://127.0.0.1:11434')
+OLLAMA = os.environ.get('SISI_OLLAMA', 'http://<IP>:11434')
 MODEL = os.environ.get('SISI_EMBED_MODEL', 'bge-m3:latest')
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get('SISI_WORKDIR') or os.path.dirname(HERE)

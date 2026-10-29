@@ -391,7 +391,7 @@ TOOLS['github_file'] = {'fn': github_file, 'desc': '读 GitHub 仓库里某个�
     'params': {'repo': ('string', 'owner/repo'), 'path': ('string', '文件路径'), 'ref': ('string', '分支，默认 main')}, 'required': ['repo', 'path']}
 
 # ---------- 用 Mac 那双手（2026-10-29） ----------
-MAC_HANDS = os.environ.get('SISI_HANDS_URL', 'http://192.168.3.19:8898')
+MAC_HANDS = os.environ.get('SISI_HANDS_URL', 'http://<IP>:8898')
 
 def _hands_token():
     p = os.path.join(os.path.dirname(os.environ.get('SISI_WORKDIR') or os.path.dirname(os.path.abspath(__file__))),

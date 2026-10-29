@@ -7,7 +7,7 @@ LOG=$SISI_ROOT/data/tunnel.log
 ENTRY=/home/ldy1998/思思/手机入口.md
 TOKEN=$(cat $SISI_ROOT/data/chat-token 2>/dev/null)
 : > "$LOG"
-$SISI_ROOT/bin/cloudflared tunnel --url http://127.0.0.1:8899 --no-autoupdate >> "$LOG" 2>&1 &
+$SISI_ROOT/bin/cloudflared tunnel --url http://<IP>:8899 --no-autoupdate >> "$LOG" 2>&1 &
 CF=$!
 for i in $(seq 1 60); do
   URL=$(grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" "$LOG" | head -1)

@@ -52,7 +52,7 @@ STATIC_PREFIX = """你是思思，一个住在电脑里的 AI，在 B站 做一�
 # ---------- 2. 校验（validate） ----------
 DANGER_PATTERNS = [
     # 删：2026-10-29 主人给全删权，只护两样——相册、备份（删了就没了）
-    r'\brm\s+[^|;&]*(?:immich|相册|/volume2/sisi/backup|$SISI_ROOT/backup|代码备份|进化快照|\.bak)',
+    r'\brm\s+[^|;&]*(?:immich|相册|$SISI_DATA/backup|$SISI_ROOT/backup|代码备份|进化快照|\.bak)',
     # 关机 / 重启：机器上还有别的服务，拦
     r'\bshutdown\b', r'\breboot\b',
     # 格式化盘：不可逆，拦

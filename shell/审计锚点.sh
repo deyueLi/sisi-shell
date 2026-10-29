@@ -4,7 +4,7 @@
 # 原理：Linux 的 append-only 属性（chattr +a）——连 root 也删不掉、改不了，只能往后加。
 set -u
 SRC_BASE=$SISI_ROOT
-ANCHOR=/volume2/sisi/审计锚点
+ANCHOR=$SISI_DATA/审计锚点
 STATE=$SRC_BASE/data/work/.anchor-state
 mkdir -p "$ANCHOR"
 touch "$STATE"

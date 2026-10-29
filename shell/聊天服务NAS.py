@@ -286,5 +286,5 @@ class H(BaseHTTPRequestHandler):
         pass
 
 if __name__ == '__main__':
-    print(f'聊天服务起来：0.0.0.0:{PORT}', flush=True)
-    ThreadingHTTPServer(('0.0.0.0', PORT), H).serve_forever()
+    print(f'聊天服务起来：<IP>:{PORT}', flush=True)
+    ThreadingHTTPServer(('<IP>', PORT), H).serve_forever()

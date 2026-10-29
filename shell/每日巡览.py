@@ -44,8 +44,8 @@ def proxy_url():
     import socket
     for port in (7890, 7891, 7897, 1080, 6152):
         try:
-            with socket.create_connection(('127.0.0.1', port), timeout=0.6):
-                return f'http://127.0.0.1:{port}'
+            with socket.create_connection(('<IP>', port), timeout=0.6):
+                return f'http://<IP>:{port}'
         except Exception:
             continue
     return ''
