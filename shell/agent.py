@@ -128,7 +128,9 @@ def run(goal, quiet=False):
                 traj.append({'role': 'tool', 'tool_call_id': tc['id'],
                              'content': json.dumps(result, ensure_ascii=False)})
                 continue
-            ok, why = H.gate(name, args, T.TOOLS)
+            ok, why = H.pingpong_guard(name, args)
+            if ok:
+                ok, why = H.gate(name, args, T.TOOLS)
             if not ok:
                 result = {'error': '被 Harness 拦下：' + why}
                 log({'step': step, 'tool': name, 'blocked': why})

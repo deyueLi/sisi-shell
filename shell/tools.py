@@ -5,7 +5,7 @@
 2. 必须返回"真实发生过什么"——返回码、字节数、退出码，不是我猜的。
 3. 出错就把错误原样给模型看，别美化。
 """
-import os, subprocess, json, sqlite3, datetime, hashlib, time
+import os, subprocess, json, sqlite3, datetime, hashlib, time, threading
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 W = os.environ.get('SISI_WORKDIR') or os.path.dirname(_HERE)   # 兜底：代码目录的上一级
@@ -42,6 +42,56 @@ def _abs(path):
     return path
 
 # ---------- 记忆 ----------
+def _norm(t):
+    import re as _re
+    return _re.sub(r'\s+', '', (t or '')).lower()
+
+
+def _db_dup(content, level=None):
+    """不走向量先查一遍库：归一化后同一句、或前 60 字一模一样 → 算重复。
+
+    为什么要有这一步：向量索引是后台算的，刚写进去那条还没进索引，
+    紧接着写一条一样的就会绕过查重（实测踩到过）。
+    """
+    n = _norm(content)
+    if not n:
+        return None
+    head = n[:60]
+    levels = [level] if level else ['soul','user','rules','lesson','fact','topic','project']
+    try:
+        c = sqlite3.connect(MEOW); c.row_factory = sqlite3.Row
+    except Exception:
+        return None
+    for lv in levels:
+        try:
+            for r in c.execute(f'select id, content from {lv}').fetchall():
+                m = _norm(r['content'])
+                if not m:
+                    continue
+                if m == n or (len(head) >= 20 and m.startswith(head)):
+                    c.close()
+                    return (r['id'], lv, 1.0)
+        except Exception:
+            continue
+    c.close()
+    return None
+
+
+def _index_async():
+    """后台把新记忆算成向量 + 同步进 FTS，不挡住当前答复。
+
+    2026-10-30 跟 MemOS 学的 fail-open：索引慢/ollama 挂了，只是「搜不到最新的」，
+    不该让写入失败，也不该让用户等。
+    """
+    def _run():
+        try:
+            import 语义
+            语义.ensure_index()
+        except Exception:
+            pass
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def memory_add(content, keywords, level='fact', project='全局', importance=2):
     """写一条记忆。id 自己生成（记忆库的 id 是 TEXT 主键，不填就是孤儿，插件读不到）。"""
     import uuid
@@ -49,6 +99,27 @@ def memory_add(content, keywords, level='fact', project='全局', importance=2):
         keywords = [k.strip() for k in keywords.replace('，', ',').split(',') if k.strip()]
     kw = json.dumps(keywords, ensure_ascii=False)
     now = int(time.time())
+    # 先查「意思几乎一样」的旧条目：md5 挡不住「换个说法写三遍」
+    near = _db_dup(content, level)
+    if not near:
+        try:
+            import 语义
+            near = 语义.near_duplicate(content)
+        except Exception:
+            near = None
+    if near and near[2] >= 0.95:
+        rid0, lv0, sc0 = near
+        try:
+            c0 = sqlite3.connect(MEOW)
+            cols0 = [d[1] for d in c0.execute(f'PRAGMA table_info({lv0})')]
+            if 'updated_at' in cols0:
+                c0.execute(f'update {lv0} set updated_at=? where id=?', (now, rid0))
+            c0.commit(); c0.close()
+        except Exception:
+            pass
+        _index_async()
+        return {'merged_into': rid0, 'level': lv0, 'similarity': sc0,
+                'note': f'和已有条目 {rid0} 相似度 {sc0}，合并而不是新写一条'}
     rid = '0mvt' + uuid.uuid4().hex[:20]
     title = (content or '')[:24]
     c = sqlite3.connect(MEOW)
@@ -60,7 +131,12 @@ def memory_add(content, keywords, level='fact', project='全局', importance=2):
     c.execute(f"insert into {level}(" + ','.join(row) + ") values(" + ','.join(['?'] * len(row)) + ")",
               list(row.values()))
     c.commit(); c.close()
-    return {'id': rid, 'level': level, 'chars': len(content or ''), 'keywords': keywords}
+    _index_async()
+    out = {'id': rid, 'level': level, 'chars': len(content or ''), 'keywords': keywords}
+    if near and near[2] >= 0.92:
+        out['near'] = {'id': near[0], 'similarity': near[2],
+                       'note': '这条和已有条目挺像，没用合并是因为低于 0.95'}
+    return out
 
 def memory_search(query, k=6):
     """先按意思找（bge-m3 向量），再按字面补，两边合起来去重。"""

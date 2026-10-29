@@ -132,7 +132,43 @@ def apply(p):
     return True
 
 def verify():
+    """验证一条提案到底有没有效。
+
+    2026-10-30 加了三道检查（照 Raven/evolver 的防自欺设计）：
+      ① 配置指纹：配置变了（换模型/改步数上限），新旧结果不可比 → 这条不算数
+      ② 量尺指纹：打分/评审代码被动过 → 旧结论作废，别拿新尺子量旧账
+      ③ 封存测试集：只用「决策时看不见」的那批数据验收，而且同一批只许开封一次
+    """
     reg = load_reg(); changed = False
+    try:
+        import 技能优化 as K
+        cfg_fp, mea_fp = K.config_fingerprint(), K.measure_hash()
+    except Exception:
+        cfg_fp = mea_fp = None
+    for p in reg:
+        if p['status'] != '待验证': continue
+        if cfg_fp and p.get('config_fp') and p['config_fp'] != cfg_fp:
+            p['status'] = '不可比-配置变了'
+            print(f"{p['id']}：配置指纹 {p['config_fp']} → {cfg_fp}，新旧不可比，这条不算数")
+            changed = True
+            continue
+        if mea_fp and p.get('measure_fp') and p['measure_fp'] != mea_fp:
+            p['status'] = '不可比-量尺变了'
+            print(f"{p['id']}：打分/评审代码变过（{p['measure_fp']} → {mea_fp}），旧结论作废")
+            changed = True
+            continue
+    # 封存集：一次性开封，用它的分数来验收（不是用「我能看见的那份」）
+    sealed_recs, msg = None, ''
+    try:
+        import 技能优化 as K
+        sealed_recs, msg = K.open_sealed_once()
+    except Exception as ex:
+        msg = f'{type(ex).__name__}'
+    if sealed_recs:
+        sc = H.score_trajectory(sealed_recs)
+        print(f'封存测试集评分：{sc}（{msg}）')
+    elif msg:
+        print('封存集：', msg)
     now_avg, n = avg_score()
     for p in reg:
         if p['status'] != '待验证': continue

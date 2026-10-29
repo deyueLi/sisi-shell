@@ -182,6 +182,28 @@ def loop_guard_nudge(name, args, max_same=3):
         return f'（同样的 {name} 你又要再调一次了。上一次的结果已经在这儿，先看它，再决定要不要换参数或换办法。）'
     return ''
 
+PINGPONG = []          # [(tool, fp)] 最近 8 次调用
+
+def pingpong_guard(name, args, window=6):
+    """两个工具来回打乒乓，也算没进展。
+
+    2026-10-30 跟 openclaw 的 detectors.pingPong 学的：它不在「同参数重复」的射程里——
+    A 查状态、B 改一点、A 再查、B 再改，参数每次都不同，但整体在原地转。
+    """
+    PINGPONG.append(name)
+    if len(PINGPONG) > 8:
+        del PINGPONG[:-8]
+    if len(PINGPONG) < window:
+        return True, ''
+    tail = PINGPONG[-window:]
+    even = tail[0::2]
+    odd = tail[1::2]
+    if len(set(even)) == 1 and len(set(odd)) == 1 and even[0] != odd[0]:
+        return False, (f'你在 {even[0]} 和 {odd[0]} 之间来回打乒乓 {window} 次了，'
+                       f'没往前挪。换个思路，或者直接说卡在哪。')
+    return True, ''
+
+
 def breaker_open(tool):
     return BREAKER.get(tool, 0) >= 3
 
@@ -190,7 +212,7 @@ def breaker_fail(tool):
     return BREAKER[tool]
 
 def breaker_reset():
-    CALL_HISTORY.clear(); BREAKER.clear()
+    CALL_HISTORY.clear(); BREAKER.clear(); PINGPONG.clear()
 
 # ---------- 7. 风险评级：从「工具」细化到「工具+参数」（思考题 7） ----------
 # 敏感路径：一律不写、不读
@@ -356,8 +378,30 @@ def repair_trajectory(messages):
 # ---------- 11. 结果指纹：参数变了但结果一样，也是在原地打转 ----------
 RESULT_HISTORY = {}
 
+VOLATILE = re.compile(
+    r'"[A-Za-z_]*(duration|elapsed|latency|took|pid|session|run_id|cwd|workdir|'
+    r'timestamp|started|finished|_at|_ms|_time)[A-Za-z_]*"\s*:\s*("[^"]*"|[0-9.]+)'
+)
+
+def _stable(result):
+    """把易变字段抹掉再比指纹。
+
+    2026-10-30 跟 openclaw 学的：他们的 exec 无进展判定会忽略 duration / PID / session id / cwd，
+    否则「什么都没变」会因为耗时分秒不同被当成「变了」，循环检测形同虚设。
+    """
+    try:
+        raw = json.dumps(result, sort_keys=True, ensure_ascii=False)
+    except Exception:
+        raw = str(result)
+    raw = VOLATILE.sub(r'"\1":"<v>"', raw)
+    # 顺手抹掉明显的时间戳和毫秒数（它们每轮都不一样）
+    raw = re.sub(r'\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}\b', '<time>', raw)
+    raw = re.sub(r'\b\d+(\.\d+)?\s*(ms|毫秒|s|秒)\b', '<dur>', raw)
+    return raw[:400]
+
+
 def result_guard(name, result):
-    fp = f'{name}:{json.dumps(result, sort_keys=True, ensure_ascii=False)[:400]}'
+    fp = f'{name}:{_stable(result)}'
     RESULT_HISTORY[fp] = RESULT_HISTORY.get(fp, 0) + 1
     if RESULT_HISTORY[fp] >= 3:
         return False, f'{name} 连续 {RESULT_HISTORY[fp]} 次返回同样的结果，没有进展'
