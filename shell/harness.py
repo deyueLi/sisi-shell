@@ -121,11 +121,22 @@ def foreign_path_warning(path):
     return ''
 
 
-def state_bar(step, max_steps, spent, budget, started_at):
+def state_bar(step, max_steps, spent, budget, started_at, run_cny=None, hit_rate=None):
+    """状态栏。2026-10-30 加「本次花多少 + 缓存命中率」——就是主人看到的那篇笔记在做的实时计费。
+
+    为什么加命中率：同一句话，命中缓存 0.02 元/百万、没命中 1 元/百万，差 50 倍。
+    不把这个数字摆出来，省钱就是一句空话。
+    """
     el = int(time.time() - started_at)
     now = datetime.datetime.now().strftime('%H:%M')
-    return (f'[状态] 现在 {now}；第 {step}/{max_steps} 步；本次已用 {el} 秒；'
-            f'今日花费 {spent:.4f} 元（{("不限" if budget == float("inf") else f"预算 {budget} 元")}）。')
+    seg = f'[状态] 现在 {now}；第 {step}/{max_steps} 步；本次已用 {el} 秒'
+    if run_cny is not None:
+        seg += f'；本次 {run_cny:.4f} 元'
+    seg += f'；今日花费 {spent:.4f} 元'
+    if hit_rate is not None:
+        seg += f'；缓存命中 {hit_rate:.0f}%'
+    seg += f'（{("不限" if budget == float("inf") else f"预算 {budget} 元")}）。'
+    return seg
 
 # ---------- 4. 压缩（接近预算时成批压旧工具输出） ----------
 def need_compact(messages, limit_chars=60000):

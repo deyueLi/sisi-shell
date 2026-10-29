@@ -21,8 +21,11 @@ import os, sys, json, glob, subprocess, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CFG = json.load(open(os.path.join(HERE, 'config.json'), encoding='utf-8'))
-PIN = CFG.get('price_in_per_m', 0.15)     # 元/百万 tokens（进）
-POUT = CFG.get('price_out_per_m', 0.6)    # 元/百万 tokens（出）
+# 2026-10-30：固定的 0.15 / 0.6 是错的（比官方便宜 6～13 倍），一律走 计费.py 的三档价
+try:
+    import 计费
+except Exception:
+    计费 = None
 DSH = os.environ.get('DSH_HOME', os.path.expanduser('~/.dsh'))
 SESS = os.path.join(DSH, 'sessions')
 ZSTD = '/opt/homebrew/bin/zstd'
@@ -87,7 +90,16 @@ def main():
     di = sum(r['inp'] for r in rows) / 1e6
     do = sum(r['out'] for r in rows) / 1e6
     dc = sum(r['cache'] for r in rows) / 1e6
-    est = di * PIN + do * POUT + dc * PIN * 0.1   # 缓存读按输入价 1 折估算
+    # 2026-10-30：改用官方价按「未命中输入 / 命中输入（缓存读）/ 输出」三档算。
+    # 便宜一半的时段按空闲价算——刻意偏保守（宁可高估，不要让人以为还有钱）。
+    if 计费:
+        IN_MISS, IN_HIT, OUT_P = 计费.PRICES['deepseek-flash']['miss'][0], \
+                                 计费.PRICES['deepseek-flash']['hit'][0], \
+                                 计费.PRICES['deepseek-flash']['out'][0]
+    else:
+        IN_MISS, IN_HIT, OUT_P = 1.0, 0.02, 4.0
+    miss_m = max(0.0, di - dc)          # DSH 的 inp 含缓存读，减掉才是未命中
+    est = miss_m * IN_MISS + dc * IN_HIT + do * OUT_P
     led, lp = shell_ledger(days)
 
     print(f'=== 花费对账（{"全部" if not days else f"最近 {days} 天"}）===')

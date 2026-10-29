@@ -47,9 +47,27 @@ def call(messages, tools_schema):
         return json.loads(r.read().decode())
 
 def cost(u):
-    if not u: return 0.0
-    return (u.get('prompt_tokens', 0) * CFG['price_in_per_m'] +
-            u.get('completion_tokens', 0) * CFG['price_out_per_m']) / 1_000_000
+    """一次调用花多少钱。
+
+    2026-10-30 重写：原来是 config 里两个固定单价（0.15 / 0.6 元每百万），
+    **比官方价便宜 6～13 倍**，而且完全不看「缓存命中」和「峰谷半价」。
+    现在交给 计费.py，按官方三档算：命中输入 / 未命中输入 / 输出。
+    """
+    if not u:
+        return 0.0
+    try:
+        import 计费
+        return 计费.cost_of(u, model=CFG.get('model'))['cny']
+    except Exception:
+        # 计费模块挂了也别把整轮弄停——按最贵的算，宁可高估
+        return (u.get('prompt_tokens', 0) * 2 + u.get('completion_tokens', 0) * 8) / 1_000_000
+
+def _hit_rate(calls):
+    """缓存命中率：命中的输入 token / 总输入 token。"""
+    hit = sum((c.get('prompt_tokens_details') or {}).get('cached_tokens') or 0 for c in calls)
+    tot = sum(c.get('prompt_tokens') or 0 for c in calls)
+    return (hit / tot * 100) if tot else None
+
 
 def summarize(text, n=200):
     s = ' '.join(str(text).split())
@@ -61,6 +79,7 @@ def run(goal, quiet=False):
     schema = T.schema_list()                      # 工具定义：静态，不许变
     traj = [{'role': 'user', 'content': goal}]    # 轨迹：只往后加
     total = 0.0
+    CALLS = []          # 本轮每次调用的 usage，用来算命中率
     fail_streak = {}
     log({'event': 'start', 'goal': goal})
 
@@ -95,11 +114,14 @@ def run(goal, quiet=False):
         if fixed:
             log({'event': 'repair_trajectory', 'filled': fixed})
         messages = [{'role': 'system', 'content': H.STATIC_PREFIX}] + traj + \
-                   [{'role': 'user', 'content': H.state_bar(step, CFG['max_steps'], spent_today() + total,
-                                                            BUDGET, started)}]
+                   [{'role': 'user', 'content': H.state_bar(
+                       step, CFG['max_steps'], spent_today() + total, BUDGET, started,
+                       run_cny=total, hit_rate=_hit_rate(CALLS))}]
         resp = call(messages, schema)
         u = resp.get('usage') or {}
         total += cost(u)
+        if u:
+            CALLS.append(u)
         msg = resp['choices'][0]['message']
         traj.append({'role': 'assistant', 'content': msg.get('content') or '',
                      'tool_calls': msg.get('tool_calls')} if msg.get('tool_calls')
@@ -180,6 +202,8 @@ def run(goal, quiet=False):
         msg2 = resp2['choices'][0]['message']
         u2 = resp2.get('usage') or {}
         total += cost(u2)
+        if u2:
+            CALLS.append(u2)
         add_spend(cost(u2))
         ans = (msg2.get('content') or '').strip()
         if ans:

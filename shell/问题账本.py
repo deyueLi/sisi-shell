@@ -21,7 +21,16 @@ W = os.environ.get('SISI_WORKDIR', os.path.dirname(HERE))
 OUT = os.path.join(W, '日志', '问题-她.jsonl')
 SNAP = os.path.join(os.path.dirname(W), '进化快照')
 RULE = os.path.join(HERE, '规则补丁.md')
-TODAY = datetime.date.today().isoformat()
+# 对账跑在 00:05，那时候「今天」才过了 5 分钟——要算的是**刚刚结束的那一天**。
+# 用法：python3 问题账本.py --day 2026-10-29
+def _day():
+    for i, a in enumerate(sys.argv):
+        if a == '--day' and i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+    return datetime.date.today().isoformat()
+
+
+TODAY = _day()
 
 # 哪些「被拦」不算真问题（她自己写错参数 / 重复调用被拦），哪些算
 NOT_A_PROBLEM = re.compile(r'缺参数|要是整数|要是字符串|要是数组|必须是绝对路径|同一调用已重复|原地打转|连败')
