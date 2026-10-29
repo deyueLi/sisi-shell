@@ -16,8 +16,16 @@ if not os.path.isdir(W):
 # ---------- 文件 ----------
 def read_file(path, limit=8000):
     p = _abs(path)
-    with open(p, encoding='utf-8') as f:
-        s = f.read()
+    # 2026-10-30：文件不在就回一条 error，别让异常冒到 agent 循环外
+    if not os.path.exists(p):
+        return {'error': f'文件不存在：{p}', 'path': p, 'exists': False}
+    if os.path.isdir(p):
+        return {'error': f'这是个目录，不是文件：{p}', 'path': p, 'is_dir': True}
+    try:
+        with open(p, encoding='utf-8') as f:
+            s = f.read()
+    except UnicodeDecodeError:
+        return {'error': f'不是文本文件（或编码不是 utf-8）：{p}', 'path': p}
     return {'path': p, 'chars': len(s), 'truncated': len(s) > limit, 'text': s[:limit]}
 
 def write_file(path, text):

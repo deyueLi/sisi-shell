@@ -79,9 +79,13 @@ check('audit_packages', lambda: T.audit_packages())
 
 # ---------- 壳的机制 ----------
 check('gate 正常命令', lambda: H.gate('run_shell', {'command': 'ls /tmp'}, T.TOOLS), lambda r: r[0] is True)
-check('gate 危险命令', lambda: H.gate('run_shell', {'command': 'rm -rf /volume1'}, T.TOOLS), lambda r: r[0] is False)
+# 2026-10-30：主人给了全删权，`rm -rf /volume1` 现在是放行的（只护相册/备份/系统本身）。
+# 所以这条改成测「机器本身」和「相册」两样——那才是真该拦的。
+check('gate 拦删系统', lambda: H.gate('run_shell', {'command': 'rm -rf /'}, T.TOOLS), lambda r: r[0] is False)
+check('gate 拦删相册', lambda: H.gate('run_shell', {'command': 'rm -rf /volume1/相册/a.jpg'}, T.TOOLS), lambda r: r[0] is False)
+check('gate 放行普通删除', lambda: H.gate('run_shell', {'command': 'rm -rf /tmp/foo'}, T.TOOLS), lambda r: r[0] is True)
 check('state_bar', lambda: H.state_bar(3, 30, 0.12, float('inf'), time.time() - 40))
-check('need_compact', lambda: H.need_compact([{'role': 'user', 'content': 'x' * 30000}]), lambda r: r is True)
+check('need_compact', lambda: H.need_compact([{'role': 'user', 'content': 'x' * 70000}]), lambda r: r is True)
 check('classify_error', lambda: H.classify_error('Connection timed out'), lambda r: r is not None)
 check('repair_trajectory', lambda: H.repair_trajectory([{'role': 'assistant', 'tool_calls': [{'id': 'x', 'function': {'name': 'run_shell', 'arguments': '{}'}}]}]))
 check('score_trajectory', lambda: H.score_trajectory([{'role': 'tool', 'content': 'ok'}]))
